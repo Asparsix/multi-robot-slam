@@ -156,3 +156,14 @@ python3 scripts/drive_both_demo.py
 ## License
 
 Apache-2.0 (package); TurtleBot / Nav2 assets remain under their upstream licenses.
+
+## Four-robot Nav2 (known map)
+
+After collaborative SLAM, run Nav2 on the saved house map (one stack per robot, auto initial pose from spawn):
+
+```bash
+ros2 launch dual_robot_known_map four_robots_nav2.launch.py
+```
+
+Map: `src/dual_robot_known_map/maps/house_collab.yaml`. RViz Fixed Frame: `map`. Use the per-robot Goal tools (`/robot1/goal_pose` … `/robot4/goal_pose`).
+

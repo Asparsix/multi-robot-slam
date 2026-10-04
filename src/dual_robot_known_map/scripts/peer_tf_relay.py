@@ -30,10 +30,14 @@ class PeerTfRelay(Node):
         self.declare_parameter('host_tf_static_topic', '/robot1/tf_static')
         self.declare_parameter('viz_prefix', 'robot2')
         self.declare_parameter('shared_frames', ['global_odom'])
+        # If true, keep parent 'map' and prefix the child (map -> robotN/odom).
+        # If false, skip peer map->* (host SLAM owns map -> ...).
+        self.declare_parameter('relay_map_frames', False)
 
         self._prefix = self.get_parameter('viz_prefix').value
         shared = self.get_parameter('shared_frames').get_parameter_value().string_array_value
         self._shared = set(shared or ['global_odom'])
+        self._relay_map = bool(self.get_parameter('relay_map_frames').value)
 
         peer_tf = self.get_parameter('peer_tf_topic').value
         peer_static = self.get_parameter('peer_tf_static_topic').value
@@ -59,13 +63,17 @@ class PeerTfRelay(Node):
     def _convert(self, msg: TFMessage) -> TFMessage:
         out = TFMessage()
         for t in msg.transforms:
-            # Skip peer map->... (host slam owns map); keep global_odom and body
             parent = t.header.frame_id.lstrip('/')
-            if parent == 'map' or parent.endswith('/map'):
+            is_map = parent == 'map' or parent.endswith('/map')
+            if is_map and not self._relay_map:
+                # Host SLAM / map_server owns map -> ...
                 continue
             nt = type(t)()
             nt.header = t.header
-            nt.header.frame_id = self._rewrite(t.header.frame_id)
+            if is_map and self._relay_map:
+                nt.header.frame_id = 'map'
+            else:
+                nt.header.frame_id = self._rewrite(t.header.frame_id)
             nt.child_frame_id = self._rewrite(t.child_frame_id)
             nt.transform = t.transform
             out.transforms.append(nt)

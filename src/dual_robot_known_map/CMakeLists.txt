@@ -3,7 +3,7 @@ project(dual_robot_known_map)
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY launch config rviz worlds
+install(DIRECTORY launch config rviz worlds maps
   DESTINATION share/${PROJECT_NAME})
 
 install(PROGRAMS
