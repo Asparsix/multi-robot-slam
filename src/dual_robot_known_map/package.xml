@@ -3,7 +3,7 @@
 <package format="3">
   <name>dual_robot_known_map</name>
   <version>0.1.0</version>
-  <description>Two robots in one RViz: known-map or dual SLAM</description>
+  <description>Multi-robot collaborative SLAM (2 or 4 robots) in one RViz</description>
   <maintainer email="you@todo.com">you</maintainer>
   <license>Apache-2.0</license>
 

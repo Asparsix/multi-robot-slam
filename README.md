@@ -1,6 +1,6 @@
 # Multi-Robot Collaborative SLAM (ROS 2)
 
-Two (or more) TurtleBot3 robots in **one Gazebo world**, **Macenski-style decentralized slam_toolbox**, and **one shared RViz** showing both robots and a collaborative map.
+Two or **four** TurtleBot3 robots in **one Gazebo world**, **Macenski-style decentralized slam_toolbox**, and **one shared RViz** showing all robots and a collaborative map.
 
 ![Gazebo + RViz: two robots collaborative SLAM](docs/multi_robot_slam.png)
 
@@ -26,8 +26,9 @@ This is **not** the official “one RViz per robot” Nav2 demo. It wires the in
 - **Decentralized multi-robot slam_toolbox** (`decentralized_multirobot_slam_toolbox_node`)
 - Shared scan topic: `/localized_scan`
 - Shared odometry frame: `global_odom` (static `global_odom → odom` at each spawn)
-- **One RViz**: robot1 TF tree + peer TF relay so **both robots** appear
-- Collaborative map on `/robot1/map` (both robots contribute when driven)
+- **One RViz**: robot1 TF tree + peer TF/scan relays so **all robots** appear
+- Collaborative map on `/robot1/map` (all robots contribute when driven)
+- **Warehouse world** (Fuel OpenRobotics warehouse + shelves) for the 4-robot launch
 
 ## Package
 
@@ -39,7 +40,8 @@ This is **not** the official “one RViz per robot” Nav2 demo. It wires the in
 
 | Launch | Description |
 |--------|-------------|
-| `two_robots_collab_slam.launch.py` | **Main:** collaborative Macenski SLAM + one RViz |
+| `four_robots_collab_slam.launch.py` | **Main:** 4 robots in warehouse, collab SLAM + one RViz |
+| `two_robots_collab_slam.launch.py` | 2 robots in TB3 sandbox, collab SLAM + one RViz |
 | `two_robots_known_map.launch.py` | Known map only (no SLAM), both robots in one RViz |
 | `two_robots_slam.launch.py` | Independent SLAM per robot (two maps overlaid) |
 
@@ -75,21 +77,40 @@ colcon build --packages-select dual_robot_known_map --symlink-install
 source install/setup.bash
 ```
 
-## Run (collaborative SLAM)
+## Run (4-robot warehouse collaborative SLAM)
+
+First launch may download Fuel models (Warehouse / shelves) — needs network once.
 
 ```bash
 source /opt/ros/jazzy/setup.bash
 source ~/slam_multi_ws/install/setup.bash   # decentralized slam_toolbox
 source ~/multi_robot_slam_ws/install/setup.bash
 
-ros2 launch dual_robot_known_map two_robots_collab_slam.launch.py
+ros2 launch dual_robot_known_map four_robots_collab_slam.launch.py
 ```
+
+Spawns (open floor, ~6 m apart in x):
+
+| Robot | Pose (x, y, yaw) |
+|-------|------------------|
+| robot1 | (-3, 0, 0) |
+| robot2 | (3, 0, π) |
+| robot3 | (-3, 5, 0) |
+| robot4 | (3, 5, π) |
 
 ### Drive robots
 
-**Safe dual demo** (recommended for a short mapping clip): robot1 drives **+x**, robot2 drives **+y** so they move apart and stay clear of the near pillars:
+**Safe four-robot demo** — each drives body-forward so they fan away from the center aisle:
 
 ```bash
+python3 scripts/drive_four_demo.py
+# or: ros2 run dual_robot_known_map drive_four_demo.py
+```
+
+**2-robot sandbox** (smaller TB3 world):
+
+```bash
+ros2 launch dual_robot_known_map two_robots_collab_slam.launch.py
 python3 scripts/drive_both_demo.py
 ```
 

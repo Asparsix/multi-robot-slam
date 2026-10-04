@@ -1,0 +1,111 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 1
+      Reference Frame: <Fixed Frame>
+    - Class: rviz_default_plugins/Map
+      Name: SharedMap
+      Enabled: true
+      Topic:
+        Value: /robot1/map
+        Depth: 5
+        Durability Policy: Transient Local
+      Alpha: 0.7
+      Color Scheme: map
+    - Class: rviz_default_plugins/LaserScan
+      Name: Scan_robot1
+      Enabled: true
+      Topic:
+        Value: /robot1/scan
+        Depth: 5
+      Size (m): 0.05
+      Style: Flat Squares
+      Color Transformer: FlatColor
+      Color: 255; 0; 0
+    - Class: rviz_default_plugins/LaserScan
+      Name: Scan_robot2
+      Enabled: true
+      Topic:
+        Value: /robot2/scan_viz
+        Depth: 5
+      Size (m): 0.05
+      Style: Flat Squares
+      Color Transformer: FlatColor
+      Color: 0; 255; 0
+    - Class: rviz_default_plugins/LaserScan
+      Name: Scan_robot3
+      Enabled: true
+      Topic:
+        Value: /robot3/scan_viz
+        Depth: 5
+      Size (m): 0.05
+      Style: Flat Squares
+      Color Transformer: FlatColor
+      Color: 0; 128; 255
+    - Class: rviz_default_plugins/LaserScan
+      Name: Scan_robot4
+      Enabled: true
+      Topic:
+        Value: /robot4/scan_viz
+        Depth: 5
+      Size (m): 0.05
+      Style: Flat Squares
+      Color Transformer: FlatColor
+      Color: 255; 200; 0
+    - Class: rviz_default_plugins/RobotModel
+      Name: Robot1
+      Enabled: true
+      Description Topic:
+        Value: /robot1/robot_description
+      TF Prefix: ""
+    - Class: rviz_default_plugins/RobotModel
+      Name: Robot2
+      Enabled: true
+      Description Topic:
+        Value: /robot2/robot_description
+      TF Prefix: robot2
+    - Class: rviz_default_plugins/RobotModel
+      Name: Robot3
+      Enabled: true
+      Description Topic:
+        Value: /robot3/robot_description
+      TF Prefix: robot3
+    - Class: rviz_default_plugins/RobotModel
+      Name: Robot4
+      Enabled: true
+      Description Topic:
+        Value: /robot4/robot_description
+      TF Prefix: robot4
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Show Names: false
+      Frame Timeout: 15
+  Global Options:
+    Fixed Frame: global_odom
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 28
+      Name: Current View
+      Pitch: 0.85
+      Yaw: 0.7
+Window Geometry:
+  Height: 900
+  Width: 1400

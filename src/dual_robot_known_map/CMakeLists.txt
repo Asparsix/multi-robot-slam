@@ -3,7 +3,7 @@ project(dual_robot_known_map)
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY launch config rviz
+install(DIRECTORY launch config rviz worlds
   DESTINATION share/${PROJECT_NAME})
 
 install(PROGRAMS
@@ -11,6 +11,7 @@ install(PROGRAMS
   scripts/prefix_scan.py
   scripts/peer_scan_relay.py
   scripts/peer_tf_relay.py
+  scripts/drive_four_demo.py
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
