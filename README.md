@@ -2,6 +2,10 @@
 
 Two (or more) TurtleBot3 robots in **one Gazebo world**, **Macenski-style decentralized slam_toolbox**, and **one shared RViz** showing both robots and a collaborative map.
 
+![Gazebo + RViz: two robots collaborative SLAM](docs/multi_robot_slam.png)
+
+*Gazebo (top) and one shared RViz (bottom): both robots mapping the TB3 sandbox together.*
+
 This is **not** the official “one RViz per robot” Nav2 demo. It wires the industry pattern (namespaced TF + `/localized_scan` sharing) into a single operator view.
 
 ## Features
