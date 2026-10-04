@@ -6,11 +6,16 @@ Two (or more) TurtleBot3 robots in **one Gazebo world**, **Macenski-style decent
 
 *Gazebo (left) and one shared RViz (right): both robots mapping the TB3 sandbox together.*
 
-**Demo video (~11s)** — both robots drive on diverging open-space lanes while the shared map fills in:
+**Demo (~11s, plays inline)** — both robots drive on diverging open-space lanes while the shared map fills in:
+
+![Demo: Gazebo + RViz, both robots collaborative mapping](docs/multi_robot_slam_demo.gif)
+
+<details>
+<summary>MP4 download (same clip)</summary>
 
 [docs/multi_robot_slam_demo.mp4](docs/multi_robot_slam_demo.mp4)
 
-![Demo still: Gazebo + RViz while both robots map](docs/multi_robot_slam_demo_frame.png)
+</details>
 
 This is **not** the official “one RViz per robot” Nav2 demo. It wires the industry pattern (namespaced TF + `/localized_scan` sharing) into a single operator view.
 
