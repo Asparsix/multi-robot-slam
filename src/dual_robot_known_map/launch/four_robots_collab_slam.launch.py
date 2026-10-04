@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Four-robot Macenski collaborative SLAM in a warehouse + one RViz.
+"""Four-robot Macenski collaborative SLAM in a small house + one RViz.
 
-- World: Fuel OpenRobotics warehouse (shelves/obstacles)
+- World: ~12x12 m house with 4 rooms, doorways, and boxes (no Fuel)
 - Each robot: decentralized_multirobot_slam_toolbox_node
 - Share scans on /localized_scan
 - Common global_odom (static global_odom -> odom at spawn)
@@ -37,12 +37,12 @@ from launch_ros.events.lifecycle import ChangeState
 from lifecycle_msgs.msg import Transition
 
 
-# Spaced on open warehouse floor (away from shelf at ~0.4,-2 and person at 1,-1).
+# One robot per room (house footprint ±6 m). Face toward central doorways.
 ROBOTS = [
-    {'name': 'robot1', 'x': -3.0, 'y': 0.0, 'yaw': 0.0},
-    {'name': 'robot2', 'x': 3.0, 'y': 0.0, 'yaw': math.pi},
-    {'name': 'robot3', 'x': -3.0, 'y': 5.0, 'yaw': 0.0},
-    {'name': 'robot4', 'x': 3.0, 'y': 5.0, 'yaw': math.pi},
+    {'name': 'robot1', 'x': -3.0, 'y': -3.0, 'yaw': 0.0},       # SW room → east
+    {'name': 'robot2', 'x': 3.0, 'y': -3.0, 'yaw': math.pi},    # SE room → west
+    {'name': 'robot3', 'x': -3.0, 'y': 3.0, 'yaw': 0.0},        # NW room → east
+    {'name': 'robot4', 'x': 3.0, 'y': 3.0, 'yaw': math.pi},     # NE room → west
 ]
 
 TF_REMAPS = [('/tf', 'tf'), ('/tf_static', 'tf_static')]
@@ -298,7 +298,7 @@ def generate_launch_description():
     ld.add_action(DeclareLaunchArgument('headless', default_value='False'))
     ld.add_action(DeclareLaunchArgument(
         'world',
-        default_value=os.path.join(pkg, 'worlds', 'warehouse_collab.sdf'),
+        default_value=os.path.join(pkg, 'worlds', 'house_rooms.sdf'),
     ))
 
     ld.add_action(set_env)

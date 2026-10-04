@@ -28,7 +28,7 @@ This is **not** the official “one RViz per robot” Nav2 demo. It wires the in
 - Shared odometry frame: `global_odom` (static `global_odom → odom` at each spawn)
 - **One RViz**: robot1 TF tree + peer TF/scan relays so **all robots** appear
 - Collaborative map on `/robot1/map` (all robots contribute when driven)
-- **Warehouse world** (Fuel OpenRobotics warehouse + shelves) for the 4-robot launch
+- **House world** (~12×12 m, 4 rooms + boxes) for the 4-robot launch
 
 ## Package
 
@@ -40,7 +40,7 @@ This is **not** the official “one RViz per robot” Nav2 demo. It wires the in
 
 | Launch | Description |
 |--------|-------------|
-| `four_robots_collab_slam.launch.py` | **Main:** 4 robots in warehouse, collab SLAM + one RViz |
+| `four_robots_collab_slam.launch.py` | **Main:** 4 robots in house (rooms+boxes), collab SLAM + one RViz |
 | `two_robots_collab_slam.launch.py` | 2 robots in TB3 sandbox, collab SLAM + one RViz |
 | `two_robots_known_map.launch.py` | Known map only (no SLAM), both robots in one RViz |
 | `two_robots_slam.launch.py` | Independent SLAM per robot (two maps overlaid) |
@@ -77,9 +77,9 @@ colcon build --packages-select dual_robot_known_map --symlink-install
 source install/setup.bash
 ```
 
-## Run (4-robot warehouse collaborative SLAM)
+## Run (4-robot house collaborative SLAM)
 
-First launch may download Fuel models (Warehouse / shelves) — needs network once.
+Compact **~12×12 m** house (4 rooms, doorways, boxes). No Fuel download.
 
 ```bash
 source /opt/ros/jazzy/setup.bash
@@ -89,14 +89,14 @@ source ~/multi_robot_slam_ws/install/setup.bash
 ros2 launch dual_robot_known_map four_robots_collab_slam.launch.py
 ```
 
-Spawns (open floor, ~6 m apart in x):
+Spawns (one robot per room):
 
-| Robot | Pose (x, y, yaw) |
-|-------|------------------|
-| robot1 | (-3, 0, 0) |
-| robot2 | (3, 0, π) |
-| robot3 | (-3, 5, 0) |
-| robot4 | (3, 5, π) |
+| Robot | Pose (x, y, yaw) | Room |
+|-------|------------------|------|
+| robot1 | (-3, -3, 0) | SW |
+| robot2 | (3, -3, π) | SE |
+| robot3 | (-3, 3, 0) | NW |
+| robot4 | (3, 3, π) | NE |
 
 ### Drive robots
 
