@@ -4,7 +4,13 @@ Two (or more) TurtleBot3 robots in **one Gazebo world**, **Macenski-style decent
 
 ![Gazebo + RViz: two robots collaborative SLAM](docs/multi_robot_slam.png)
 
-*Gazebo (top) and one shared RViz (bottom): both robots mapping the TB3 sandbox together.*
+*Gazebo (left) and one shared RViz (right): both robots mapping the TB3 sandbox together.*
+
+**Demo video (~11s)** — both robots drive on diverging open-space lanes while the shared map fills in:
+
+[docs/multi_robot_slam_demo.mp4](docs/multi_robot_slam_demo.mp4)
+
+![Demo still: Gazebo + RViz while both robots map](docs/multi_robot_slam_demo_frame.png)
 
 This is **not** the official “one RViz per robot” Nav2 demo. It wires the industry pattern (namespaced TF + `/localized_scan` sharing) into a single operator view.
 
@@ -76,6 +82,14 @@ ros2 launch dual_robot_known_map two_robots_collab_slam.launch.py
 
 ### Drive robots
 
+**Safe dual demo** (recommended for a short mapping clip): robot1 drives **+x**, robot2 drives **+y** so they move apart and stay clear of the near pillars:
+
+```bash
+python3 scripts/drive_both_demo.py
+```
+
+Or teleop each robot:
+
 ```bash
 # Robot 1
 ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r __ns:=/robot1 -p stamped:=false
@@ -87,6 +101,18 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r __ns:=/robot2
 Use `stamped:=false` — the Gazebo bridge expects `geometry_msgs/Twist`, not `TwistStamped`.
 
 Keys: `i` forward, `,` back, `j`/`l` turn, `k` stop.
+
+### Record a short demo video
+
+With Gazebo + RViz visible on `:0`:
+
+```bash
+# terminal A — record side-by-side windows (~11s)
+python3 scripts/record_demo_windows.py --out docs/multi_robot_slam_demo.mp4 --seconds 11
+
+# terminal B — drive both at the same time
+python3 scripts/drive_both_demo.py
+```
 
 ### RViz tips
 
