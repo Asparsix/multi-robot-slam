@@ -12,6 +12,10 @@ install(PROGRAMS
   scripts/peer_scan_relay.py
   scripts/peer_tf_relay.py
   scripts/drive_four_demo.py
+  scripts/prioritized_mapf.py
+  scripts/mrpa_executor.py
+  scripts/swarm_demo_goals.py
+  scripts/cbba_nav_smoke_test.py
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

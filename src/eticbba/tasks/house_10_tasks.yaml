@@ -1,0 +1,61 @@
+# Ten reach-point tasks on house_collab map (4 robots, CBBA step 1).
+#
+# Task = go to (x, y) in frame `map`. Orientation ignored.
+# Success / planning disk: goal_tolerance_xy (meters).
+
+map: house_collab.yaml
+map_package: dual_robot_known_map
+frame_id: map
+goal_tolerance_xy: 0.25
+
+robots:
+  count: 4
+  names: [robot1, robot2, robot3, robot4]
+  bundle_capacity_k: 2
+  spawns:
+    robot1: {x: -3.0, y: -3.0}
+    robot2: {x: 3.0, y: -3.0}
+    robot3: {x: -3.0, y: 3.0}
+    robot4: {x: 3.0, y: 3.0}
+
+tasks:
+  - id: T01
+    x: -1.5
+    y: -1.5
+    description: SW room (inward from robot1 spawn)
+  - id: T02
+    x: -1.0
+    y: -2.5
+    description: South corridor west
+  - id: T03
+    x: -0.5
+    y: 0.0
+    description: Center-west crossing
+  - id: T04
+    x: 0.0
+    y: 0.0
+    description: House center
+  - id: T05
+    x: 0.5
+    y: 0.0
+    description: Center-east crossing
+  - id: T06
+    x: 2.0
+    y: -2.0
+    description: SE room (inward from robot2 spawn)
+  - id: T07
+    x: 2.5
+    y: -1.0
+    description: East corridor south
+  - id: T08
+    x: -2.0
+    y: 2.0
+    description: NW room (inward from robot3 spawn)
+  - id: T09
+    x: 1.5
+    y: 2.0
+    description: NE room (inward from robot4 spawn)
+  - id: T10
+    x: -1.5
+    y: 1.5
+    description: NW inner / north corridor west

@@ -126,6 +126,38 @@ Visualization Manager:
         Durability Policy: Transient Local
       Alpha: 0.4
       Color Scheme: costmap
+    - Class: rviz_default_plugins/Path
+      Name: SwarmPath_robot1
+      Enabled: true
+      Topic:
+        Value: /swarm/robot1/path
+      Color: 255; 0; 0
+      Line Style: Billboards
+      Line Width: 0.05
+    - Class: rviz_default_plugins/Path
+      Name: SwarmPath_robot2
+      Enabled: true
+      Topic:
+        Value: /swarm/robot2/path
+      Color: 0; 255; 0
+      Line Style: Billboards
+      Line Width: 0.05
+    - Class: rviz_default_plugins/Path
+      Name: SwarmPath_robot3
+      Enabled: true
+      Topic:
+        Value: /swarm/robot3/path
+      Color: 0; 128; 255
+      Line Style: Billboards
+      Line Width: 0.05
+    - Class: rviz_default_plugins/Path
+      Name: SwarmPath_robot4
+      Enabled: true
+      Topic:
+        Value: /swarm/robot4/path
+      Color: 255; 200; 0
+      Line Style: Billboards
+      Line Width: 0.05
     - Class: rviz_default_plugins/TF
       Name: TF
       Enabled: false

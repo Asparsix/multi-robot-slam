@@ -193,29 +193,14 @@ def generate_launch_description():
                     'prefix': '',
                     'odom_frame': 'odom',
                     'base_frame': 'base_footprint',
+                    'republish_hz': 20.0,
                 }],
                 remappings=TF_REMAPS,
                 output='screen',
             ),
-            # Known spawn on saved map — reliable map->odom for Nav2 in sim
-            # (AMCL still runs for particle viz; tf_broadcast disabled in params).
-            Node(
-                package='tf2_ros',
-                executable='static_transform_publisher',
-                namespace=name,
-                name='map_to_odom',
-                arguments=[
-                    '--x', str(r['x']),
-                    '--y', str(r['y']),
-                    '--z', '0',
-                    '--yaw', str(r['yaw']),
-                    '--frame-id', 'map',
-                    '--child-frame-id', 'odom',
-                ],
-                parameters=[{'use_sim_time': True}],
-                remappings=TF_REMAPS,
-                output='screen',
-            ),
+            # map->odom comes from AMCL (tf_broadcast: true in nav2_robot*.yaml).
+            # Do not also publish a static map->odom — that fights AMCL and
+            # breaks the one-localization-source-per-robot pattern.
         ])
 
     # Nav2 bringup per robot (AMCL + controller/planner/bt)

@@ -29,18 +29,27 @@ This is **not** the official “one RViz per robot” Nav2 demo. It wires the in
 - **One RViz**: robot1 TF tree + peer TF/scan relays so **all robots** appear
 - Collaborative map on `/robot1/map` (all robots contribute when driven)
 - **House world** (~12×12 m, 4 rooms + boxes) for the 4-robot launch
+- **4× Nav2** on the saved map with AMCL as the sole `map→odom` source
+- **Prioritized MAPF** + **timestep executor** (drive robots on conflict-aware paths)
+- **CBBA** task allocation (`eticbba`) with Nav2 path-length cost
 
-## Package
+## Packages
 
 | Path | Role |
 |------|------|
-| `src/dual_robot_known_map` | Launch, bridges, relays, RViz configs |
+| `src/dual_robot_known_map` | Gazebo launches, Nav2 configs, MAPF, timestep executor, relays, RViz |
+| `src/eticbba` | CBBA assigner (Nav2 `ComputePathToPose` cost) |
+| `docs/SWARM_MAPF.md` | Architecture notes for MAPF + TF + execution |
 
 ### Launches
 
 | Launch | Description |
 |--------|-------------|
 | `four_robots_collab_slam.launch.py` | **Main:** 4 robots in house (rooms+boxes), collab SLAM + one RViz |
+| `four_robots_nav2.launch.py` | 4 robots + known map + Nav2 per robot (AMCL TF) |
+| `four_robots_swarm_nav.launch.py` | Nav2 + prioritized MAPF + timestep executor + corner-swap demo |
+| `cbba_nav_smoke_test.launch.py` | Sequential / parallel Nav2 smoke tests |
+| `eticbba/cbba_house_assign.launch.py` | CBBA on 10 house tasks (needs Nav2 up) |
 | `two_robots_collab_slam.launch.py` | 2 robots in TB3 sandbox, collab SLAM + one RViz |
 | `two_robots_known_map.launch.py` | Known map only (no SLAM), both robots in one RViz |
 | `two_robots_slam.launch.py` | Independent SLAM per robot (two maps overlaid) |
@@ -67,14 +76,20 @@ source ~/slam_multi_ws/install/setup.bash
 
 ## Build
 
+From this repo (or a workspace that contains these packages under `src/`):
+
 ```bash
-mkdir -p ~/multi_robot_slam_ws/src
-cp -r src/dual_robot_known_map ~/multi_robot_slam_ws/src/
-cd ~/multi_robot_slam_ws
+cd ~/multi_robot_slam
 source /opt/ros/jazzy/setup.bash
-# also source your slam_toolbox overlay if needed
-colcon build --packages-select dual_robot_known_map --symlink-install
+# also source your slam_toolbox overlay if needed for collab SLAM
+colcon build --packages-select dual_robot_known_map eticbba --symlink-install
 source install/setup.bash
+```
+
+For 4× Nav2, also keep FastDDS SHM disabled if you hit DDS issues:
+
+```bash
+export FASTRTPS_DEFAULT_PROFILES_FILE=~/nav2_ws/fastdds_no_shm.xml
 ```
 
 ## Run (4-robot house collaborative SLAM)
@@ -159,11 +174,58 @@ Apache-2.0 (package); TurtleBot / Nav2 assets remain under their upstream licens
 
 ## Four-robot Nav2 (known map)
 
-After collaborative SLAM, run Nav2 on the saved house map (one stack per robot, auto initial pose from spawn):
+After collaborative SLAM, run Nav2 on the saved house map (one stack per robot):
 
 ```bash
 ros2 launch dual_robot_known_map four_robots_nav2.launch.py
 ```
 
 Map: `src/dual_robot_known_map/maps/house_collab.yaml`. RViz Fixed Frame: `map`. Use the per-robot Goal tools (`/robot1/goal_pose` … `/robot4/goal_pose`).
+
+### TF (Nav2 multi-robot pattern)
+
+Each robot has its own `/robotN/tf` tree:
+
+- **AMCL** is the sole `map→odom` publisher (`tf_broadcast: true` + spawn `initial_pose` in `config/nav2_robotN.yaml`)
+- **`prefix_odom_tf`** only publishes `odom→base_footprint` from Gazebo odom (odom timestamps, 20 Hz republish)
+- **No static `map→odom`** (that fights AMCL under load)
+
+## Four-robot swarm (MAPF + timestep drive)
+
+Prioritized multi-agent path finding + timestep execution on top of 4× Nav2.
+
+1. Demo (or CBBA) publishes goals on `/swarm/robotN/goal`
+2. `prioritized_mapf` plans conflict-aware space–time paths → `/swarm/robotN/path`
+3. `mrpa_executor` walks each path **one time-step at a time**  
+   (`NavigateToPose` → wait until near → next step), same idea as mapf_ros `plan_executor`
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/multi_robot_slam/install/setup.bash
+
+export FASTRTPS_DEFAULT_PROFILES_FILE=~/nav2_ws/fastdds_no_shm.xml
+
+ros2 launch dual_robot_known_map four_robots_swarm_nav.launch.py
+```
+
+Useful args: `headless:=True`, `use_rviz:=False`, `demo_delay:=40.0`, `use_demo_goals:=False` (when feeding goals from CBBA).
+
+RViz shows `/swarm/robotN/path`. Success looks like `paths_ready=True (4/4)` then `Makespan complete`.
+
+**Details:** [docs/SWARM_MAPF.md](docs/SWARM_MAPF.md)
+
+## CBBA task allocation (`eticbba`)
+
+Static 10-task house assignment with Nav2 path length as CBBA cost (bundle cap K=2):
+
+```bash
+# Terminal A — Nav2 (or swarm launch with use_demo_goals:=False)
+ros2 launch dual_robot_known_map four_robots_nav2.launch.py
+
+# Terminal B — after /robot1/compute_path_to_pose is available
+ros2 launch eticbba cbba_house_assign.launch.py
+```
+
+Writes `/tmp/house_10_cbba_assignment.yaml` and first goals on `/swarm/robotN/goal`.  
+See [src/eticbba/README.md](src/eticbba/README.md).
 
