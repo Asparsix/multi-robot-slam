@@ -19,6 +19,12 @@ Two or **four** TurtleBot3 robots in **one Gazebo world**, **Macenski-style dece
 
 This is **not** the official “one RViz per robot” Nav2 demo. It wires the industry pattern (namespaced TF + `/localized_scan` sharing) into a single operator view.
 
+## Technical documentation
+
+- **[docs/TECHNICAL_OVERVIEW.md](docs/TECHNICAL_OVERVIEW.md)** — what we solve, system layers, and file-by-file codebase mapping  
+- **[docs/SWARM_MAPF.md](docs/SWARM_MAPF.md)** — MAPF + timestep executor runbook  
+- **[src/eticbba/README.md](src/eticbba/README.md)** — CBBA package  
+
 ## Features
 
 - One Gazebo world, **one `/clock` bridge** (no dual-clock TF fighting)
@@ -41,6 +47,7 @@ This is **not** the official “one RViz per robot” Nav2 demo. It wires the in
 | `src/eticbba` | CBBA assigner (Nav2 `ComputePathToPose` cost) |
 | `docs/SWARM_MAPF.md` | Architecture notes for MAPF + TF + execution |
 | `docs/TECHNICAL_OVERVIEW.md` | **Full technical doc:** problem, layers, codebase map |
+| `docs/TECHNICAL_OVERVIEW.tex` | LaTeX version of the technical overview |
 
 ### Launches
 

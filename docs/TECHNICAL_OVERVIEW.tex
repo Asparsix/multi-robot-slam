@@ -1,0 +1,526 @@
+\documentclass[11pt,a4paper]{article}
+
+% --- Packages ---
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{microtype}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  urlcolor=blue!60!black,
+  citecolor=blue!50!black
+}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!8},
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{Multi-Robot House Mission Stack}
+\rhead{Technical Document}
+\cfoot{\thepage}
+
+\title{\textbf{Technical Document:\\Multi-Robot House Mission Stack}}
+\author{
+  Repository: \texttt{Asparsix/multi-robot-slam}\\
+  Stack: ROS~2 Jazzy $\cdot$ Gazebo Harmonic $\cdot$ Nav2 $\cdot$
+  slam\_toolbox $\cdot$ CBBA $\cdot$ prioritized MAPF
+}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document describes the multi-robot house mission system implemented in
+\texttt{multi-robot-slam}: what problem is solved, how the stack is layered
+(simulation, mapping, localization, CBBA task allocation, MAPF, and Nav2
+execution), and how each concern maps onto concrete files in the codebase.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%=============================================================================
+\section{Problem statement}
+%=============================================================================
+
+We want \textbf{four TurtleBot3 robots} in one simulated house to:
+
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Map} the environment collaboratively (or reuse a saved map).
+  \item \textbf{Localize} each robot on that map.
+  \item \textbf{Assign} a pool of reach-point tasks to robots
+        (multi-robot task allocation).
+  \item \textbf{Plan} motion so robots do not collide in space--time
+        (multi-agent path finding).
+  \item \textbf{Execute} those paths so robots actually arrive at every
+        assigned task.
+\end{enumerate}
+
+Classical single-robot Nav2 only solves localization and (partial) execution
+for one agent. It does \textbf{not} assign tasks across a fleet or guarantee
+non-conflicting multi-robot plans. This stack adds \textbf{CBBA} (who does
+which tasks) and \textbf{MAPF} (how they move without fighting), then uses
+\textbf{Nav2} as the low-level driver.
+
+%=============================================================================
+\section{What we are solving (layered)}
+%=============================================================================
+
+\begin{table}[htbp]
+\centering
+\caption{System layers L0--L5.}
+\label{tab:layers}
+\begin{tabular}{@{}llp{6.2cm}@{}}
+\toprule
+\textbf{Layer} & \textbf{Question} & \textbf{Approach in this repo} \\
+\midrule
+L0 Simulation & How do 4 robots exist in one world?
+  & Gazebo house world + namespaced bridges \\
+L1 Mapping & How do we get a shared map?
+  & Collaborative slam\_toolbox $\rightarrow$ \texttt{house\_collab} map \\
+L2 Localization / TF & Where is each robot in \texttt{map}?
+  & AMCL \texttt{map$\rightarrow$odom} + odom TF per namespace \\
+L3 Task allocation & Who does which tasks, in what order?
+  & \textbf{CBBA} (\texttt{eticbba}), bundle capacity $K$ \\
+L4 Multi-robot path planning & How to avoid collisions between robots?
+  & \textbf{Prioritized MAPF} (space--time A*) \\
+L5 Execution & How do wheels follow the plan?
+  & Timestep \textbf{Nav2 \texttt{NavigateToPose}} executor \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{End-to-end mission verified:} CBBA assigns tasks $\rightarrow$ MAPF
+each bundle leg $\rightarrow$ all robots finish every assigned task
+(including leftovers so all \textbf{10} house tasks complete).
+
+%=============================================================================
+\section{System overview}
+%=============================================================================
+
+\begin{lstlisting}[caption={Layered architecture (text diagram).},label={lst:arch}]
+Gazebo house world (4 TB3s)
+  /clock · /robotN/odom · /robotN/scan · /robotN/cmd_vel
+                 |
+Per-robot Nav2 stack (/robotN/...)
+  map_server · AMCL · planner · controller · bt_navigator
+  TF: map -> odom (AMCL) -> base_footprint (prefix_odom_tf)
+                 |
+Mission layer
+  CBBA --> /swarm/robotN/goal --> MAPF --> /swarm/robotN/path
+                              --> timestep executor --> Nav2
+\end{lstlisting}
+
+\subsection{Packages}
+
+\begin{table}[htbp]
+\centering
+\caption{ROS~2 packages in the repository.}
+\label{tab:packages}
+\begin{tabular}{@{}llp{5.5cm}@{}}
+\toprule
+\textbf{Package} & \textbf{Path} & \textbf{Responsibility} \\
+\midrule
+\texttt{dual\_robot\_known\_map}
+  & \texttt{src/dual\_robot\_known\_map/}
+  & Sim, SLAM launches, Nav2 configs, MAPF, executor, TF helpers \\
+\texttt{eticbba}
+  & \texttt{src/eticbba/}
+  & CBBA solver, Nav2 path cost, full mission coordinator \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%=============================================================================
+\section{Codebase map (by concern)}
+%=============================================================================
+
+\subsection{Simulation and bringup}
+
+\begin{longtable}{@{}p{7.2cm}p{7cm}@{}}
+\toprule
+\textbf{File} & \textbf{Role} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{Role} \\
+\midrule
+\endhead
+\texttt{.../worlds/house\_rooms.sdf}
+  & $\sim$12$\times$12\,m house world \\
+\texttt{.../launch/four\_robots\_nav2.launch.py}
+  & Spawn 4 robots, bridges, RSP, odom TF, 4$\times$ Nav2 \\
+\texttt{.../launch/four\_robots\_collab\_slam.launch.py}
+  & Collaborative SLAM bringup \\
+\texttt{.../config/bridge\_no\_clock.yaml}
+  & Per-robot GZ$\leftrightarrow$ROS bridge (no duplicate \texttt{/clock}) \\
+\texttt{.../maps/house\_collab.\{yaml,pgm\}}
+  & Saved known map used for Nav2/MAPF \\
+\bottomrule
+\end{longtable}
+
+\subsection{Localization / TF (L2)}
+
+\begin{longtable}{@{}p{7.2cm}p{7cm}@{}}
+\toprule
+\textbf{File} & \textbf{Role} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{Role} \\
+\midrule
+\endhead
+\texttt{.../config/nav2\_robot\{1..4\}.yaml}
+  & Nav2 params; AMCL \texttt{tf\_broadcast: true}; spawn \texttt{initial\_pose} \\
+\texttt{.../scripts/prefix\_odom\_tf.py}
+  & Publishes \texttt{odom$\rightarrow$base\_footprint} from Gazebo odom \\
+\texttt{.../scripts/peer\_tf\_relay.py}
+  & Relays peer TF into robot1 tree for single-RViz view \\
+\texttt{.../scripts/peer\_scan\_relay.py}
+  & Relays peer scans for visualization \\
+\bottomrule
+\end{longtable}
+
+\textbf{Design rule:} one localization TF source per robot---\textbf{AMCL owns
+\texttt{map$\rightarrow$odom}}. No static \texttt{map$\rightarrow$odom}
+publisher (removed from \texttt{four\_robots\_nav2.launch.py} because it fought
+AMCL).
+
+\subsection{Task allocation --- CBBA (L3)}
+
+\begin{longtable}{@{}p{7.2cm}p{7cm}@{}}
+\toprule
+\textbf{File} & \textbf{Role} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{Role} \\
+\midrule
+\endhead
+\texttt{eticbba/cbba\_solver.py}
+  & Core CBBA algorithm (bundles, consensus) \\
+\texttt{eticbba/nav2\_path\_cost.py}
+  & Cost oracle: Nav2 \texttt{ComputePathToPose} length; Euclidean fallback \\
+\texttt{eticbba/cbba\_assign\_node.py}
+  & ROS node: load tasks, run CBBA, write YAML \\
+\texttt{eticbba/tasks/house\_10\_tasks.yaml}
+  & 10 reach tasks + robot spawns + $K$ \\
+\texttt{eticbba/launch/cbba\_house\_assign.launch.py}
+  & Assign-only launch \\
+\bottomrule
+\end{longtable}
+
+\textbf{What CBBA solves:} given robots and tasks, produce ordered
+\textbf{bundles} per robot that maximize score (prefer more tasks / shorter
+travel).
+
+\textbf{Important:} CBBA is \emph{assignment}. It does \textbf{not} move robots.
+But \textbf{scoring} calls Nav2 path length many times, which can time out under
+4$\times$ Nav2 load. Euclidean fallback keeps assignment alive.
+
+\textbf{$K$ and 10 tasks:} With $K{=}2$ and 4 robots, at most 8 tasks fit in
+bundles. Leftovers (e.g.\ T03, T04) are attached in the mission coordinator so
+all 10 can still be executed.
+
+\subsection{Multi-agent path finding --- MAPF (L4)}
+
+\begin{center}
+\texttt{src/dual\_robot\_known\_map/scripts/prioritized\_mapf.py}
+\end{center}
+
+\textbf{Algorithm (short):}
+\begin{enumerate}[leftmargin=*]
+  \item Robots planned in fixed priority:
+        \texttt{robot1 $>$ robot2 $>$ robot3 $>$ robot4}.
+  \item Higher-priority path is reserved in $(x,y,t)$ and on edges.
+  \item Lower-priority robot A*s around those reservations (can wait).
+  \item Output path keeps wait cells (one pose per timestep) for space--time sync.
+\end{enumerate}
+
+\textbf{I/O:}
+\begin{itemize}[leftmargin=*]
+  \item In: \texttt{/swarm/robotN/goal}, \texttt{/robot1/map}, \texttt{/robotN/tf}
+  \item Out: \texttt{/swarm/robotN/path}, \texttt{/swarm/paths\_ready}
+\end{itemize}
+
+This is \textbf{prioritized MAPF}, not optimal CBS/ECBS.
+
+\subsection{Execution --- timestep Nav2 (L5)}
+
+\begin{center}
+\texttt{src/dual\_robot\_known\_map/scripts/mrpa\_executor.py}
+\end{center}
+
+\textbf{Why not one \texttt{NavigateThroughPoses}?} Dumping the whole MAPF path
+into Nav2 lets robots free-run and break space--time sync. Instead:
+
+\begin{lstlisting}[caption={Timestep execution loop.},label={lst:timestep}]
+for t in 0 .. makespan-1:
+    send NavigateToPose(pose[t]) to each robot
+    wait until all are near (or wall-clock step timeout)
+    advance
+\end{lstlisting}
+
+Publishes \texttt{/swarm/makespan\_complete} when a plan finishes.
+
+\subsection{Full mission orchestration}
+
+\begin{longtable}{@{}p{7.2cm}p{7cm}@{}}
+\toprule
+\textbf{File} & \textbf{Role} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{File} & \textbf{Role} \\
+\midrule
+\endhead
+\texttt{eticbba/cbba\_mapf\_mission.py}
+  & CBBA $\rightarrow$ leftovers $\rightarrow$ MAPF legs $\rightarrow$ verify \\
+\texttt{eticbba/launch/cbba\_mapf\_mission.launch.py}
+  & Swarm Nav2 (no demo goals) + delayed mission node \\
+\texttt{.../launch/four\_robots\_swarm\_nav.launch.py}
+  & Nav2 + MAPF + executor + optional demo goals \\
+\texttt{.../scripts/swarm\_demo\_goals.py}
+  & Corner-swap demo goals only \\
+\bottomrule
+\end{longtable}
+
+\begin{lstlisting}[caption={Mission leg loop.},label={lst:mission}]
+CBBA(bundles)
+attach any unassigned leftovers to nearest/shortest robots
+for leg = 0 .. max_bundle_length-1:
+    publish /swarm/*/goal for this leg (idle robots hold pose)
+    wait paths_ready
+    wait makespan_complete or TF near goals
+    mark COMPLETED task ids
+assert all 10 tasks done  -->  ALL_TEN_TASKS_OK
+\end{lstlisting}
+
+\subsection{Supporting / test utilities}
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{cbba\_nav\_smoke\_test.py} --- sequential/parallel Nav2 smoke tests
+  \item \texttt{drive\_four\_demo.py} --- open-loop drive for SLAM demos
+  \item \texttt{docs/SWARM\_MAPF.md} --- shorter swarm/MAPF runbook
+\end{itemize}
+
+%=============================================================================
+\section{End-to-end data flow}
+%=============================================================================
+
+\begin{lstlisting}[caption={Mission data flow.},label={lst:flow}]
+house_10_tasks.yaml
+        |
+        v
+cbba_mapf_mission / cbba_solver
+        |  bundles per robot
+        v
+/swarm/robotN/goal          (PoseStamped, one goal per leg)
+        |
+        v
+prioritized_mapf
+        |
+        +-- /swarm/robotN/path       (nav_msgs/Path)
+        +-- /swarm/paths_ready       (Bool)
+                |
+                v
+        mrpa_executor
+                |
+                +-- /robotN/navigate_to_pose   (Nav2 action)
+                +-- /swarm/makespan_complete
+                        |
+                        v
+                TF check near task --> COMPLETED
+\end{lstlisting}
+
+\subsection{Topics / actions}
+
+\begin{table}[htbp]
+\centering
+\caption{Primary topics and actions.}
+\label{tab:topics}
+\begin{tabular}{@{}llp{4.8cm}@{}}
+\toprule
+\textbf{Name} & \textbf{Type} & \textbf{Producer $\rightarrow$ Consumer} \\
+\midrule
+\texttt{/swarm/robotN/goal} & PoseStamped & mission/CBBA/demo $\rightarrow$ MAPF \\
+\texttt{/swarm/robotN/path} & Path & MAPF $\rightarrow$ executor / RViz \\
+\texttt{/swarm/paths\_ready} & Bool & MAPF $\rightarrow$ executor / mission \\
+\texttt{/swarm/makespan\_complete} & Bool & executor $\rightarrow$ mission \\
+\texttt{/robotN/navigate\_to\_pose} & action & executor $\rightarrow$ Nav2 \\
+\texttt{/robotN/compute\_path\_to\_pose} & action & CBBA cost $\rightarrow$ planner \\
+\texttt{/robotN/tf}, \texttt{tf\_static} & TF & AMCL + odom\_tf + RSP \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%=============================================================================
+\section{Verified behavior}
+%=============================================================================
+
+\begin{table}[htbp]
+\centering
+\caption{Capability status.}
+\label{tab:status}
+\begin{tabular}{@{}llp{5.5cm}@{}}
+\toprule
+\textbf{Capability} & \textbf{Status} & \textbf{Evidence / notes} \\
+\midrule
+Collaborative SLAM / known map & Implemented & \texttt{house\_collab} map + SLAM launches \\
+4$\times$ Nav2 + AMCL TF & Working & Full \texttt{map$\rightarrow$odom$\rightarrow$base} smoke \\
+Corner-swap MAPF + drive & Working & \texttt{Makespan complete} on swarm demo \\
+CBBA assignment & Working & YAML bundles written \\
+Full mission all 10 tasks & Working & \texttt{all\_ten\_tasks\_done: true} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Example successful assignment shape:
+
+\begin{lstlisting}
+robot1: T02 -> T01 -> T03
+robot2: T06 -> T07 -> T04
+robot3: T08 -> T10
+robot4: T09 -> T05
+\end{lstlisting}
+
+%=============================================================================
+\section{Design decisions and trade-offs}
+%=============================================================================
+
+\begin{table}[htbp]
+\centering
+\caption{Key design decisions.}
+\label{tab:decisions}
+\begin{tabular}{@{}p{3.2cm}p{4.5cm}p{4.5cm}@{}}
+\toprule
+\textbf{Decision} & \textbf{Why} & \textbf{Trade-off} \\
+\midrule
+Namespaced TF per robot
+  & Matches Nav2 multi-robot practice
+  & Swarm nodes must subscribe per-robot TF \\
+AMCL owns \texttt{map$\rightarrow$odom}
+  & Single localization source
+  & Needs good initial pose / scan sync \\
+Prioritized MAPF
+  & Simple, fast, good enough for demo
+  & Not optimal; priority bias \\
+Timestep \texttt{NavigateToPose}
+  & Preserves MAPF time sync
+  & Slower; many Nav2 goals \\
+Nav2 as CBBA cost
+  & Path length reflects map obstacles
+  & Planner load $\rightarrow$ timeouts; Euclidean fallback \\
+$K{=}2$ + leftover attach
+  & Stable CBBA under load; covers all 10
+  & Leftovers are greedy, not re-auctioned \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%=============================================================================
+\section{How to run}
+%=============================================================================
+
+\subsection{Full CBBA $\rightarrow$ MAPF $\rightarrow$ finish all tasks}
+
+\begin{lstlisting}[language=bash]
+source /opt/ros/jazzy/setup.bash
+source ~/nav2_ws/install/setup.bash
+source ~/multi_robot_slam/install/setup.bash
+export FASTRTPS_DEFAULT_PROFILES_FILE=~/nav2_ws/fastdds_no_shm.xml
+
+ros2 launch eticbba cbba_mapf_mission.launch.py headless:=True use_rviz:=False
+\end{lstlisting}
+
+Expect: \texttt{/tmp/cbba\_mapf\_mission\_result.yaml} with
+\texttt{success: true} and \texttt{all\_ten\_tasks\_done: true}.
+
+\subsection{MAPF demo only (corner swap)}
+
+\begin{lstlisting}[language=bash]
+ros2 launch dual_robot_known_map four_robots_swarm_nav.launch.py
+\end{lstlisting}
+
+\subsection{Nav2 only}
+
+\begin{lstlisting}[language=bash]
+ros2 launch dual_robot_known_map four_robots_nav2.launch.py
+\end{lstlisting}
+
+%=============================================================================
+\section{Known limitations}
+%=============================================================================
+
+\begin{enumerate}[leftmargin=*]
+  \item Four Nav2 stacks on one PC stress DDS/CPU (TF blips, planner timeouts,
+        step timeouts).
+  \item CBBA $\neq$ motion --- timeouts during CBBA are usually cost-query
+        overload, not driving failure.
+  \item Prioritized MAPF is suboptimal vs CBS/ECBS.
+  \item Step timeouts in the executor advance anyway; sync is soft under load.
+  \item Optional future: replace Nav2 execution with a thin tracker (Option~B)
+        to cut load.
+\end{enumerate}
+
+%=============================================================================
+\section{Quick ``where is X?'' index}
+%=============================================================================
+
+\begin{table}[htbp]
+\centering
+\caption{Concept to primary source file.}
+\label{tab:index}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Concept} & \textbf{Primary code} \\
+\midrule
+CBBA math & \texttt{eticbba/cbba\_solver.py} \\
+CBBA + Nav2 cost & \texttt{eticbba/nav2\_path\_cost.py}, \texttt{cbba\_assign\_node.py} \\
+Task list & \texttt{eticbba/tasks/house\_10\_tasks.yaml} \\
+Full mission & \texttt{eticbba/cbba\_mapf\_mission.py} \\
+MAPF & \texttt{dual\_robot\_known\_map/scripts/prioritized\_mapf.py} \\
+Path execution & \texttt{dual\_robot\_known\_map/scripts/mrpa\_executor.py} \\
+Nav2 / AMCL config & \texttt{dual\_robot\_known\_map/config/nav2\_robot*.yaml} \\
+Odom TF & \texttt{dual\_robot\_known\_map/scripts/prefix\_odom\_tf.py} \\
+4-robot Nav2 launch & \texttt{.../launch/four\_robots\_nav2.launch.py} \\
+Swarm launch & \texttt{.../launch/four\_robots\_swarm\_nav.launch.py} \\
+Mission launch & \texttt{eticbba/launch/cbba\_mapf\_mission.launch.py} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%=============================================================================
+\section{Related documents}
+%=============================================================================
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{README.md} --- user-facing overview and run commands
+  \item \texttt{docs/SWARM\_MAPF.md} --- shorter MAPF/TF runbook
+  \item \texttt{docs/TECHNICAL\_OVERVIEW.md} --- Markdown source of this document
+  \item \texttt{src/eticbba/README.md} --- CBBA package notes
+  \item Repository:
+        \url{https://github.com/Asparsix/multi-robot-slam}
+\end{itemize}
+
+\end{document}

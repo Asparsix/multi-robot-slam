@@ -310,4 +310,5 @@ ros2 launch dual_robot_known_map four_robots_nav2.launch.py
 
 - [README.md](../README.md) — user-facing overview and run commands  
 - [SWARM_MAPF.md](SWARM_MAPF.md) — shorter MAPF/TF runbook  
+- [TECHNICAL_OVERVIEW.tex](TECHNICAL_OVERVIEW.tex) — LaTeX version of this document  
 - [eticbba/README.md](../src/eticbba/README.md) — CBBA package notes  
