@@ -40,6 +40,7 @@ This is **not** the official “one RViz per robot” Nav2 demo. It wires the in
 | `src/dual_robot_known_map` | Gazebo launches, Nav2 configs, MAPF, timestep executor, relays, RViz |
 | `src/eticbba` | CBBA assigner (Nav2 `ComputePathToPose` cost) |
 | `docs/SWARM_MAPF.md` | Architecture notes for MAPF + TF + execution |
+| `docs/TECHNICAL_OVERVIEW.md` | **Full technical doc:** problem, layers, codebase map |
 
 ### Launches
 
