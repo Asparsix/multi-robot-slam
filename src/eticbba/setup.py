@@ -23,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             'cbba_house_assign = eticbba.cbba_assign_node:main',
+            'cbba_mapf_mission = eticbba.cbba_mapf_mission:main',
         ],
     },
 )

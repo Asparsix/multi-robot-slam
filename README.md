@@ -216,16 +216,24 @@ RViz shows `/swarm/robotN/path`. Success looks like `paths_ready=True (4/4)` the
 
 ## CBBA task allocation (`eticbba`)
 
-Static 10-task house assignment with Nav2 path length as CBBA cost (bundle cap K=2):
+Static 10-task house assignment with Nav2 path length as CBBA cost (bundle cap K=2).
+
+**Full pipeline** (assign → MAPF each leg → finish every assigned task):
 
 ```bash
-# Terminal A — Nav2 (or swarm launch with use_demo_goals:=False)
-ros2 launch dual_robot_known_map four_robots_nav2.launch.py
+source ~/nav2_ws/install/setup.bash
+source ~/multi_robot_slam/install/setup.bash
+export FASTRTPS_DEFAULT_PROFILES_FILE=~/nav2_ws/fastdds_no_shm.xml
 
-# Terminal B — after /robot1/compute_path_to_pose is available
+ros2 launch eticbba cbba_mapf_mission.launch.py headless:=True use_rviz:=False
+```
+
+Assign-only:
+
+```bash
+ros2 launch dual_robot_known_map four_robots_nav2.launch.py
 ros2 launch eticbba cbba_house_assign.launch.py
 ```
 
-Writes `/tmp/house_10_cbba_assignment.yaml` and first goals on `/swarm/robotN/goal`.  
-See [src/eticbba/README.md](src/eticbba/README.md).
+See [src/eticbba/README.md](src/eticbba/README.md) and [docs/SWARM_MAPF.md](docs/SWARM_MAPF.md).
 

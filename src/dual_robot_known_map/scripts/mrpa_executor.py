@@ -105,6 +105,7 @@ class TimestepExecutor(Node):
             )
 
         self.create_subscription(Bool, '/swarm/paths_ready', self._on_ready, 10)
+        self._makespan_pub = self.create_publisher(Bool, '/swarm/makespan_complete', 10)
 
         # Namespaced TF (same pattern as prioritized_mapf)
         self._tf_buffers: Dict[str, Buffer] = {}
@@ -224,6 +225,9 @@ class TimestepExecutor(Node):
             if nxt >= self._makespan:
                 self.get_logger().info('Makespan complete — all step goals done')
                 self._active = False
+                done = Bool()
+                done.data = True
+                self._makespan_pub.publish(done)
                 return
             self._dispatch_step(nxt)
             return

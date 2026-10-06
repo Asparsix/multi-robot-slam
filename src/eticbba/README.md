@@ -32,12 +32,15 @@ ros2 launch eticbba cbba_house_assign.launch.py
 
 Output: `/tmp/house_10_cbba_assignment.yaml` and first task goal per robot on `/swarm/robotN/goal`.
 
-To **drive** the assigned goals with MAPF, run the swarm layer (or full swarm launch with demo goals off):
+### Full mission (recommended)
+
+CBBA → MAPF every bundle leg → verify all assigned tasks reached:
 
 ```bash
-ros2 launch dual_robot_known_map four_robots_swarm_nav.launch.py use_demo_goals:=False
-# then run this CBBA launch so goals feed prioritized_mapf + mrpa_executor
+ros2 launch eticbba cbba_mapf_mission.launch.py headless:=True use_rviz:=False
 ```
+
+Expect `ALL_ASSIGNED_TASKS_OK` and `/tmp/cbba_mapf_mission_result.yaml` with `success: true`.
 
 See [docs/SWARM_MAPF.md](../../docs/SWARM_MAPF.md).
 

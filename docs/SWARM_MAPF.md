@@ -101,11 +101,26 @@ Step 0/58 reached by all agents
 Makespan complete — all step goals done
 ```
 
-## CBBA then MAPF
+## CBBA then MAPF (full mission)
 
-1. Start Nav2 (or the swarm launch with `use_demo_goals:=False`).
-2. Run `ros2 launch eticbba cbba_house_assign.launch.py`.
-3. Ensure `prioritized_mapf` + `mrpa_executor` are running so assigned `/swarm/*/goal` get planned and executed.
+One-shot launch that **assigns → MAPF each bundle leg → verifies every assigned task**:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/nav2_ws/install/setup.bash          # dual_robot_known_map
+source ~/multi_robot_slam/install/setup.bash # eticbba
+export FASTRTPS_DEFAULT_PROFILES_FILE=~/nav2_ws/fastdds_no_shm.xml
+
+ros2 launch eticbba cbba_mapf_mission.launch.py headless:=True use_rviz:=False
+```
+
+Success criteria: `/tmp/cbba_mapf_mission_result.yaml` has `success: true` and log line `ALL_ASSIGNED_TASKS_OK`.  
+With K=2 and 4 robots, up to 8 of 10 tasks are assigned; the rest stay in `unassigned_task_ids`.
+
+Manual two-step (assign only, or demo goals):
+
+1. `ros2 launch dual_robot_known_map four_robots_swarm_nav.launch.py use_demo_goals:=False`
+2. `ros2 launch eticbba cbba_house_assign.launch.py`
 
 See `src/eticbba/README.md`.
 
