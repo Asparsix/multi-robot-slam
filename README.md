@@ -46,8 +46,9 @@ This is **not** the official “one RViz per robot” Nav2 demo. It wires the in
 | `src/dual_robot_known_map` | Gazebo launches, Nav2 configs, MAPF, timestep executor, relays, RViz |
 | `src/eticbba` | CBBA assigner (Nav2 `ComputePathToPose` cost) |
 | `docs/SWARM_MAPF.md` | Architecture notes for MAPF + TF + execution |
-| `docs/TECHNICAL_OVERVIEW.md` | **Full technical doc:** problem, layers, codebase map |
-| `docs/TECHNICAL_OVERVIEW.tex` | LaTeX version of the technical overview |
+| `docs/TECHNICAL_OVERVIEW.tex` | Hackathon-style overview (plain language, flow diagrams) |
+| `docs/TECHNICAL_OVERVIEW.txt` | Same overview in plain text |
+| `docs/TECHNICAL_OVERVIEW.md` | Short one-pager |
 
 ### Launches
 
@@ -55,6 +56,9 @@ This is **not** the official “one RViz per robot” Nav2 demo. It wires the in
 |--------|-------------|
 | `four_robots_collab_slam.launch.py` | **Main:** 4 robots in house (rooms+boxes), collab SLAM + one RViz |
 | `four_robots_nav2.launch.py` | 4 robots + known map + Nav2 per robot (AMCL TF) |
+| `four_robots_pibt.launch.py` | **No Nav2**: PIBT brain + SMART ADG executor (Type-2 deps) |
+| `four_robots_pibt_cbba.launch.py` | **v2:** CBBA → PIBT/ADG, 20 tasks, per-robot queues + replan-on-completion |
+| `four_robots_lite.launch.py` | Lite Gazebo bringup (no Nav2/AMCL) used by PIBT demos |
 | `four_robots_swarm_nav.launch.py` | Nav2 + prioritized MAPF + timestep executor + corner-swap demo |
 | `cbba_nav_smoke_test.launch.py` | Sequential / parallel Nav2 smoke tests |
 | `eticbba/cbba_house_assign.launch.py` | CBBA on 10 house tasks (needs Nav2 up) |
@@ -198,7 +202,34 @@ Each robot has its own `/robotN/tf` tree:
 - **`prefix_odom_tf`** only publishes `odom→base_footprint` from Gazebo odom (odom timestamps, 20 Hz republish)
 - **No static `map→odom`** (that fights AMCL under load)
 
-## Four-robot swarm (MAPF + timestep drive)
+## Four-robot PIBT swarm (no Nav2)
+
+Collision-free fleet planning with a **PIBT** brain and a **SMART ADG** executor (Hönig-style Type-2 release) on the lite Gazebo bringup (no AMCL/Nav2):
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/multi_robot_slam/install/setup.bash
+ros2 launch dual_robot_known_map four_robots_pibt.launch.py headless:=True
+```
+
+Pipeline: goals → `pibt_planner` → `/swarm/robotN/path` → `adg_executor` (SMART ADG) → `cmd_vel`. See [docs/SWARM_MAPF.md](docs/SWARM_MAPF.md).
+
+### v2: CBBA + PIBT with independent task queues
+
+Full mission without Nav2: Euclidean CBBA assigns up to **20** house tasks; each robot advances its own bundle when *it* finishes a task; MAPF is **replanned on any completion** (no global leg barrier).
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/nav2_ws/install/setup.bash   # FastDDS profile optional
+source ~/multi_robot_slam/install/setup.bash
+export FASTRTPS_DEFAULT_PROFILES_FILE=~/nav2_ws/fastdds_no_shm.xml
+
+ros2 launch dual_robot_known_map four_robots_pibt_cbba.launch.py headless:=True use_rviz:=True
+```
+
+Results: `/tmp/house_20_cbba_assignment.yaml`, `/tmp/cbba_pibt_mission_result.yaml`.
+
+## Four-robot swarm (MAPF + timestep Nav2)
 
 Prioritized multi-agent path finding + timestep execution on top of 4× Nav2.
 

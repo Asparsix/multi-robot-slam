@@ -1,0 +1,235 @@
+================================================================================
+MULTI-ROBOT HOUSE MISSION
+What we are doing (high-level walkthrough)
+Internal hackathon notes — plain language, no heavy math
+================================================================================
+
+
+THE PROBLEM IN ONE SENTENCE
+---------------------------
+Four robots share one house. There are ten places they must visit.
+Split the work fairly, move without hitting each other, and finish every place.
+
+If only one robot existed, this would be “go from A to B.” With four robots and
+many goals, we need extra layers: a shared map, task assignment, and traffic
+planning so they do not block or bump into each other.
+
+
+BIG PICTURE: FIVE STEPS
+-----------------------
+
+  1. Multi-robot SLAM (build the map)
+        → Shared floor plan of the house
+
+  2. Localization (where is each robot?)
+        → Live position of every robot
+
+  3. CBBA (who does which tasks?)
+        → Ordered to-do list per robot
+
+  4. MAPF (plan paths that do not clash)
+        → Timed routes that avoid collisions
+
+  5. Execution (actually drive)
+        → Wheels move; tasks get checked off
+
+         └── next task in the list loops back to step 4
+
+“Navigation” in everyday language (drive to a point) is mostly step 5.
+Steps 1–4 exist so that driving is smart for a TEAM.
+
+Often we build the map once, save it, and reuse it. Steps 2–5 run every
+mission. Steps 4–5 repeat for each next goal in the robots’ lists.
+
+
+STEP 1 — MULTI-ROBOT SLAM (BUILD THE MAP)
+-----------------------------------------
+What problem this solves
+  The robots do not magically know the house layout. They need a map: where
+  walls are, where free space is. Without that, they cannot plan routes or
+  agree on “task T04 is here.”
+
+What SLAM means in plain words
+  SLAM = build a map WHILE figuring out where you are on that map. The robot
+  looks around with a laser (LIDAR), moves a bit using wheel odometry, and
+  glues scans together into one picture of the rooms.
+
+  Useful mental model: the robot keeps many guesses (“I might be here, or
+  here, or here”). New laser readings make some guesses more believable.
+  Over time the map fills in and the best guess of position settles. Those
+  guesses are often called particles.
+
+Why multi-robot SLAM
+  One robot mapping the whole house is slow. Four robots explore different
+  rooms and share what they see. We want ONE SHARED MAP, not four private
+  sketches. Later, when we say “go to the kitchen,” every robot means the
+  same place.
+
+What we take away
+  A floor-plan style grid: free cells vs walls. For demos we often save that
+  map and reload it.
+
+  This step does NOT assign tasks and does NOT stop robots from colliding
+  with each other during the mission. It only answers: what does the world
+  look like?
+
+
+STEP 2 — LOCALIZATION (WHERE IS EACH ROBOT?)
+--------------------------------------------
+What problem this solves
+  Once the map exists, each robot still needs a live answer: “I am at this
+  spot, facing this way.”
+
+How to think about it
+  Again, particle-style thinking: many possible positions; laser scans vote
+  for the ones that match the known map; the robot reports the best estimate.
+  Wheel motion updates the guess between scans.
+
+Why we need it
+  • Task assignment needs to know who is already close to which goals.
+  • Path planning needs a start point for every robot.
+  • Finishing a task means checking “did I actually arrive?”
+
+Without localization, goals are just numbers on paper.
+
+
+STEP 3 — CBBA (WHO DOES WHICH TASKS?)
+-------------------------------------
+What problem this solves
+  Ten places, four robots. If everyone rushes to the nearest goal, they fight
+  over the same jobs and leave others untouched. We need a fair split: which
+  robot takes which tasks, and in what order.
+
+What CBBA is (high level)
+  CBBA is an auction-style assignment method. Each robot builds a short
+  to-do list (a “bundle”) of tasks. Robots “bid” on tasks. Through a few
+  rounds of sharing bids, they agree so each task has at most one owner.
+
+How bidding works (intuition, not formulas)
+  A robot does not only ask “is this task close to me?” It asks:
+
+    “If I add this task into my current to-do list in the best place, how much
+     EXTRA travel does that cost me?”
+
+  That “extra effort” idea is the marginal cost idea. A task that sits
+  naturally on your route is cheap to add; a task that forces a long detour
+  is expensive. Robots that can serve a task with less extra effort tend to
+  win it.
+
+  To estimate travel, we look at a path on the map that goes around walls
+  (not just a straight line through furniture). If that lookup is busy or
+  fails, we fall back to straight-line distance as a rough guess.
+
+What CBBA does NOT do
+  CBBA does not drive the robots. After it finishes we only have ordered
+  lists like:
+    Robot 1: task A → task B → …
+    Robot 2: task C → task D → …
+
+  We also limit how many tasks one robot may take in one auction round. Extra
+  leftover tasks can be handed out afterward so all ten places still get
+  covered.
+
+How this feeds the next step
+  We do not send a robot through its whole list at once. We go LEG BY LEG:
+  everyone works on their “next” task; when that wave finishes, take the
+  following task in each list. Each wave becomes goals for path planning.
+
+
+STEP 4 — MAPF (PLAN SO PATHS DO NOT CLASH)
+------------------------------------------
+What problem this solves
+  Even with different goals, robots can meet in a doorway at the same time.
+  Planning around walls alone is not enough — we need TEAM planning: who is
+  where at which time.
+
+What MAPF means
+  MAPF = Multi-Agent Path Finding. Plan routes for everyone together so that:
+  • two robots do not sit on the same spot at the same time, and
+  • they do not swap through each other in a narrow corridor.
+  Waiting in place is allowed (“you pause while the other passes”).
+
+CBS / ECBS (names you might hear)
+  Research methods that carefully search for and fix conflicts. Good to know
+  as names. We do NOT run those here.
+
+What we use instead: prioritized planning
+  1. Plan robot 1 first; reserve the cells it will use at each time.
+  2. Plan robot 2 around those reservations (it may wait or detour).
+  3. Same for robot 3, then robot 4.
+
+  So paths are chosen so they do not merge in a conflicting way in space and
+  time. Lower-priority robots may wait longer — that is the trade-off for
+  keeping the method simple and fast.
+
+Output
+  For the current wave of goals, each robot gets a timed path: waypoints
+  including “stay here for a beat” when needed.
+
+
+STEP 5 — EXECUTION (MAKE THE ROBOTS ACTUALLY MOVE)
+--------------------------------------------------
+What problem this solves
+  A plan on paper does not move wheels. Each robot still needs low-level
+  driving: follow the next pose, avoid local bumps, stop near the target.
+
+Why we do not “just send the whole path”
+  If every robot free-runs its full route on its own clock, they lose the
+  timing MAPF carefully set. One arrives early, blocks a corridor, and the
+  team plan falls apart.
+
+What we do instead
+  Treat the MAPF plan like a shared playlist of beats:
+  1. At beat t, every robot drives toward its pose for that beat.
+  2. Wait until everyone is close enough (or time out).
+  3. Advance to the next beat.
+
+  Multi-robot planning stays in MAPF; single-robot driving only tracks the
+  current beat.
+
+  When the timed plan is done, check which tasks were reached, then MAPF
+  again for the next leg of the to-do lists.
+
+
+FULL STORY OF ONE MISSION
+-------------------------
+  1. Map once: robots explore (or load a saved house map).
+  2. Bring everyone online: each robot knows where it is.
+  3. Assign work: CBBA builds ordered to-do lists; attach leftovers if needed.
+  4. For each wave of “next” goals:
+       • MAPF plans timed paths that do not clash.
+       • Robots drive beat-by-beat until that wave finishes.
+       • Check off completed tasks.
+  5. Done when every task place has been visited.
+
+  Flow:
+    Load/build map → Localize → CBBA assign
+         → MAPF for this wave → Drive beat-by-beat
+         → more tasks in lists? ─yes─► MAPF again
+         → no → Mission complete
+
+
+QUICK CHEAT SHEET
+-----------------
+  Multi-SLAM      Build one shared map of the house from many robots.
+  Localization    Keep track of where each robot is on that map.
+  CBBA            Auction tasks into ordered to-do lists (extra effort / marginal).
+  MAPF            Plan timed routes so robots do not collide with each other.
+  Execution       Drive together, one synchronized step at a time.
+
+What we are actually doing:
+  map the house → know positions → split the jobs
+  → plan conflict-free traffic → drive until every place is done.
+
+
+DEMO TALKING POINTS (OPTIONAL)
+------------------------------
+  • “CBBA is the team manager; MAPF is the traffic controller; low-level
+     driving is just following the green light.”
+  • “We are not using fancy CBS/ECBS planners — we use a priority order so
+     planning stays quick.”
+  • “If you see robots pause, that can be intentional waiting so someone else
+     can pass.”
+  • “Assignment happens before motion; timeouts during assignment are usually
+     about scoring routes, not about driving failure.”
+================================================================================

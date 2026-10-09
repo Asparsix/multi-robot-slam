@@ -1,9 +1,59 @@
-# Four-robot swarm: MAPF + timestep Nav2 execution
+# Four-robot swarm: MAPF + execution
 
 This document describes the multi-robot planning and execution stack on the
 saved house map (`house_collab`).
 
-## Pipeline
+## Recommended (scalable): PIBT + SMART ADG (no Nav2)
+
+```text
+Goals (/swarm/robotN/goal)
+        │
+        ▼
+pibt_planner              PIBT brain on shared OccupancyGrid
+        │                 publishes /swarm/robotN/path
+        │                 /swarm/paths_ready = true when all succeed
+        ▼
+adg_executor              SMART ADG (Type-1 + Type-2 release)
+        │                 cmd_vel only for currently released actions
+        ▼
+Gazebo bridges            no AMCL / no Nav2 stacks
+```
+
+ADG ported from [smart-mapf/smart](https://github.com/smart-mapf/smart) `server/ADG`
+(Hönig et al.): bots wait only on real cross-robot dependencies, not full lockstep.
+
+```bash
+ros2 launch dual_robot_known_map four_robots_pibt.launch.py headless:=True
+```
+
+### CBBA + 20 house tasks (PIBT/ADG)
+
+```bash
+ros2 launch dual_robot_known_map four_robots_pibt_cbba.launch.py headless:=True
+# tasks: eticbba/tasks/house_20_tasks.yaml (4 robots × K=5)
+# results: /tmp/house_20_cbba_assignment.yaml , /tmp/cbba_pibt_mission_result.yaml
+```
+
+### Auto grid (not map-specific knobs)
+
+Coarse cell size and agent separation are **computed** from body geometry + map
+resolution (`mapf_grid_params.py`), then published on `/swarm/mapf_grid` for the
+ADG executor:
+
+```text
+clearance   = 2 * robot_radius + planning_margin
+downsample  = ceil(clearance / map_resolution)
+coarse_res  = downsample * map_resolution
+min_sep     = max(0, ceil(clearance / coarse_res) - 1) + extra_sep_cells
+```
+
+If that coarse graph disconnects start↔goal, downsample is **shrunk** until
+paths exist (or resolution 1). Overrides `grid_stride>0` / `min_sep>=0` are
+debug-only; launch defaults leave them auto.
+
+Configure only: `robot_radius`, `planning_margin`, `extra_sep_cells`.
+
+## Legacy pipeline: prioritized MAPF + timestep Nav2
 
 ```text
 Goals (/swarm/robotN/goal)

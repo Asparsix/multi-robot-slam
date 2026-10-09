@@ -49,7 +49,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('headless', default_value='True'),
         DeclareLaunchArgument('use_rviz', default_value='False'),
-        DeclareLaunchArgument('mission_delay', default_value='45.0'),
+        DeclareLaunchArgument('mission_delay', default_value='90.0'),
         nav_swarm,
         delayed,
     ])

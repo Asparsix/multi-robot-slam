@@ -24,7 +24,7 @@ class Nav2PathCost:
         action_name: str = '/robot1/compute_path_to_pose',
         planner_id: str = 'GridBased',
         server_timeout: float = 30.0,
-        call_timeout: float = 15.0,
+        call_timeout: float = 20.0,
     ):
         self._node = node
         self._client = ActionClient(node, ComputePathToPose, action_name)
@@ -64,6 +64,36 @@ class Nav2PathCost:
         if key in self._cache:
             return self._cache[key]
 
+        last_err: Exception | None = None
+        for attempt in range(1, 3):
+            try:
+                length = self._path_length_uncached(start, goal)
+                self._cache[key] = length
+                self._logger.info(
+                    f'Nav2 path {start} -> {goal}: {length:.2f} m',
+                    throttle_duration_sec=2.0,
+                )
+                return length
+            except Exception as e:
+                last_err = e
+                self._logger.warn(
+                    f'Nav2 path attempt {attempt}/2 failed {start}->{goal}: {e}'
+                )
+                import time as _time
+                t_end = _time.monotonic() + 1.5
+                while _time.monotonic() < t_end:
+                    rclpy.spin_once(self._node, timeout_sec=0.1)
+
+        # Fallback so CBBA can still assign under planner load; execution still uses MAPF+Nav2.
+        eucl = math.hypot(goal[0] - start[0], goal[1] - start[1]) * 1.25
+        self._logger.warn(
+            f'Using Euclidean fallback {start}->{goal}: {eucl:.2f} m '
+            f'(last Nav2 error: {last_err})'
+        )
+        self._cache[key] = eucl
+        return eucl
+
+    def _path_length_uncached(self, start: Point, goal: Point) -> float:
         goal_msg = ComputePathToPose.Goal()
         goal_msg.use_start = True
         goal_msg.planner_id = self._planner_id
@@ -97,13 +127,7 @@ class Nav2PathCost:
             raise RuntimeError(f'ComputePathToPose result timed out {start} -> {goal}')
 
         res = result_fut.result().result
-        length = self._path_length_m(res.path)
-        self._cache[key] = length
-        self._logger.info(
-            f'Nav2 path {start} -> {goal}: {length:.2f} m (poses={len(res.path.poses)})',
-            throttle_duration_sec=2.0,
-        )
-        return length
+        return self._path_length_m(res.path)
 
     def bundle_path_length(self, start: Point, task_points: list[Point]) -> float:
         if not task_points:

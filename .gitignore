@@ -1,6 +1,7 @@
 build/
 install/
 log/
+.cursor_sim_logs/
 __pycache__/
 *.pyc
 *.pyo

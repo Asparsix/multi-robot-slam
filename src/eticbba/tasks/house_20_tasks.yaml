@@ -1,0 +1,41 @@
+# Twenty reach-point tasks on house_collab map (4 robots × K=5).
+#
+# Task = go to (x, y) in frame `map`. Orientation ignored.
+# Locations snapped to free space with ~0.25 m wall clearance.
+
+map: house_collab.yaml
+map_package: dual_robot_known_map
+frame_id: map
+goal_tolerance_xy: 0.35
+
+robots:
+  count: 4
+  names: [robot1, robot2, robot3, robot4]
+  bundle_capacity_k: 5
+  spawns:
+    robot1: {x: -3.0, y: -3.0}
+    robot2: {x: 3.0, y: -3.0}
+    robot3: {x: -3.0, y: 3.0}
+    robot4: {x: 3.0, y: 3.0}
+
+tasks:
+  - {id: T01, x: -2.00, y: -2.10, description: SW room}
+  - {id: T02, x: -0.50, y: -2.50, description: South corridor west}
+  - {id: T03, x: 0.50, y: -2.50, description: South corridor east}
+  - {id: T04, x: 2.00, y: -2.00, description: SE room}
+  - {id: T05, x: 2.50, y: -1.00, description: East corridor south}
+  - {id: T06, x: 2.50, y: 0.50, description: East corridor north}
+  - {id: T07, x: 1.80, y: 1.80, description: NE room inward}
+  - {id: T08, x: 1.00, y: 2.50, description: North corridor east}
+  - {id: T09, x: -0.50, y: 2.50, description: North corridor west}
+  - {id: T10, x: -2.00, y: 2.00, description: NW room}
+  - {id: T11, x: -2.50, y: 1.00, description: West corridor north}
+  - {id: T12, x: -2.50, y: -0.50, description: West corridor south}
+  - {id: T13, x: -1.00, y: -1.00, description: SW inner}
+  - {id: T14, x: 1.00, y: -1.00, description: SE inner}
+  - {id: T15, x: -1.00, y: 1.00, description: NW inner}
+  - {id: T16, x: 1.00, y: 1.00, description: NE inner}
+  - {id: T17, x: 0.00, y: 0.00, description: House center}
+  - {id: T18, x: -0.20, y: -1.30, description: South of center}
+  - {id: T19, x: -0.30, y: 1.20, description: North of center}
+  - {id: T20, x: -1.30, y: -0.30, description: West of center}

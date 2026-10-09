@@ -24,6 +24,7 @@ setup(
         'console_scripts': [
             'cbba_house_assign = eticbba.cbba_assign_node:main',
             'cbba_mapf_mission = eticbba.cbba_mapf_mission:main',
+            'cbba_lite_mission = eticbba.cbba_lite_mission:main',
         ],
     },
 )

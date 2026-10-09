@@ -30,7 +30,8 @@ from std_msgs.msg import Bool
 from tf2_msgs.msg import TFMessage
 from tf2_ros import Buffer
 
-from eticbba.cbba_assign_node import CbbaAssignNode
+from eticbba.cbba_solver import run_cbba
+from eticbba.nav2_path_cost import Nav2PathCost
 
 
 DEFAULT_ROBOTS = ['robot1', 'robot2', 'robot3', 'robot4']
@@ -43,9 +44,10 @@ class CbbaMapfMission(Node):
         self.declare_parameter('output_file', '/tmp/house_10_cbba_assignment.yaml')
         self.declare_parameter('result_file', '/tmp/cbba_mapf_mission_result.yaml')
         self.declare_parameter('goal_tolerance_xy', 0.40)
-        self.declare_parameter('paths_ready_timeout_sec', 120.0)
-        self.declare_parameter('leg_timeout_sec', 900.0)
+        self.declare_parameter('paths_ready_timeout_sec', 180.0)
+        self.declare_parameter('leg_timeout_sec', 1200.0)
         self.declare_parameter('settle_sec', 2.0)
+        self.declare_parameter('planner_wait_sec', 120.0)
 
         tasks_file = str(self.get_parameter('tasks_file').value)
         if not tasks_file:
@@ -151,28 +153,97 @@ class CbbaMapfMission(Node):
         self._goal_pubs[name].publish(msg)
 
     def _run_cbba(self) -> dict:
-        # Separate node for Nav2 cost queries; do not publish first goals here.
-        tasks_file = str(self.get_parameter('tasks_file').value)
-        if not tasks_file:
-            tasks_file = str(
-                Path(get_package_share_directory('eticbba'))
-                / 'tasks'
-                / 'house_10_tasks.yaml'
+        """Run CBBA on this node once Nav2 planner answers reliably."""
+        import numpy as np
+
+        path_cost = Nav2PathCost(
+            self,
+            action_name='/robot1/compute_path_to_pose',
+            server_timeout=90.0,
+            call_timeout=20.0,
+        )
+        planner_wait = float(self.get_parameter('planner_wait_sec').value)
+        self.get_logger().info('Waiting for Nav2 ComputePathToPose…')
+        t0 = time.monotonic()
+        ready = False
+        while rclpy.ok() and (time.monotonic() - t0) < planner_wait:
+            if path_cost.wait_for_server():
+                ready = True
+                break
+            rclpy.spin_once(self, timeout_sec=0.5)
+        if not ready:
+            raise RuntimeError('Nav2 planner action server not available')
+        # Warm-up (may use Euclidean fallback if planner is slow)
+        _ = path_cost.path_length((-3.0, -3.0), (-1.5, -1.5))
+        self.get_logger().info('Planner ready (or Euclidean fallback active)')
+
+        robot_names = list(self._cfg['robots']['names'])
+        task_ids = [t['id'] for t in self._cfg['tasks']]
+        task_xy = np.array(
+            [[t['x'], t['y']] for t in self._cfg['tasks']], dtype=np.float64
+        )
+        spawns = {
+            name: (
+                float(self._cfg['robots']['spawns'][name]['x']),
+                float(self._cfg['robots']['spawns'][name]['y']),
             )
-        assign = CbbaAssignNode()
-        assign.set_parameters([
-            rclpy.Parameter('tasks_file', value=tasks_file),
-            rclpy.Parameter(
-                'output_file',
-                value=str(self.get_parameter('output_file').value),
-            ),
-            rclpy.Parameter('publish_goals', value=False),
-        ])
-        assign._goal_pubs = {}  # mission publishes every leg
-        try:
-            result = assign.run_assignment()
-        finally:
-            assign.destroy_node()
+            for name in robot_names
+        }
+        k = int(self._cfg['robots'].get('bundle_capacity_k', 3))
+        score_offset = 1.0e4
+        task_pts = [tuple(task_xy[j]) for j in range(len(task_ids))]
+
+        def score_fn(agent_id: int, path_indices):
+            if not path_indices:
+                return 0.0
+            points = [task_pts[j] for j in path_indices]
+            spawn = spawns[robot_names[agent_id]]
+            length = path_cost.bundle_path_length(spawn, points)
+            return score_offset * len(path_indices) - length
+
+        self.get_logger().info(
+            f'Running CBBA: {len(robot_names)} robots, {len(task_ids)} tasks, K={k}'
+        )
+        agents = run_cbba(
+            [spawns[n] for n in robot_names], task_xy, k, score_fn
+        )
+
+        assignment = {}
+        assigned_set = set()
+        for i, name in enumerate(robot_names):
+            bundle_idx = agents[i].p
+            bundle_ids = [task_ids[j] for j in bundle_idx]
+            if bundle_idx:
+                pts = [tuple(task_xy[j]) for j in bundle_idx]
+                plen = path_cost.bundle_path_length(spawns[name], pts)
+            else:
+                plen = 0.0
+            assignment[name] = {
+                'bundle_indices': bundle_idx,
+                'bundle_task_ids': bundle_ids,
+                'path_length_m': float(plen),
+            }
+            assigned_set.update(bundle_idx)
+
+        pool = [task_ids[j] for j in range(len(task_ids)) if j not in assigned_set]
+        result = {
+            'algorithm': 'CBBA',
+            'cost_model': 'nav2_compute_path_to_pose_length',
+            'bundle_capacity_k': k,
+            'robots': assignment,
+            'unassigned_task_ids': pool,
+            'nav2_cache_queries': len(path_cost._cache),
+        }
+        text = yaml.dump(result, sort_keys=False)
+        self.get_logger().info(f'CBBA result:\n{text}')
+        out = str(self.get_parameter('output_file').value)
+        if out:
+            Path(out).write_text(text, encoding='utf-8')
+            self.get_logger().info(f'Wrote {out}')
+        if pool:
+            self.get_logger().warn(f'Unassigned after CBBA: {pool}')
+        else:
+            self.get_logger().info('All 10 tasks assigned by CBBA')
         return result
 
     def _near(self, name: str, x: float, y: float) -> bool:
@@ -189,6 +260,39 @@ class CbbaMapfMission(Node):
         self.get_logger().info('Running CBBA assignment…')
         assignment = self._run_cbba()
         robots = assignment['robots']
+
+        # Ensure leftover tasks (e.g. T03/T04) also get a robot when K was tight
+        leftovers = list(assignment.get('unassigned_task_ids') or [])
+        if leftovers:
+            self.get_logger().info(f'Assigning leftovers to robots: {leftovers}')
+            for tid in leftovers:
+                t = self._tasks[tid]
+                tx, ty = float(t['x']), float(t['y'])
+                best = None
+                best_key = None
+                for name in self._robots:
+                    bundle = robots[name]['bundle_task_ids']
+                    xy = self._lookup_xy(name)
+                    if xy is None:
+                        sx = float(self._cfg['robots']['spawns'][name]['x'])
+                        sy = float(self._cfg['robots']['spawns'][name]['y'])
+                        xy = (sx, sy)
+                    # Prefer fewer tasks, then nearer robot
+                    key = (len(bundle), math.hypot(xy[0] - tx, xy[1] - ty))
+                    if best_key is None or key < best_key:
+                        best_key = key
+                        best = name
+                assert best is not None
+                robots[best]['bundle_task_ids'].append(tid)
+                self.get_logger().info(f'Leftover {tid} -> {best}')
+            assignment['unassigned_task_ids'] = []
+            assignment['robots'] = robots
+            out = str(self.get_parameter('output_file').value)
+            if out:
+                Path(out).write_text(
+                    yaml.dump(assignment, sort_keys=False), encoding='utf-8'
+                )
+
         max_legs = max(
             (len(robots[n]['bundle_task_ids']) for n in self._robots),
             default=0,
@@ -301,8 +405,12 @@ class CbbaMapfMission(Node):
         # Final report
         expected = {n: list(robots[n]['bundle_task_ids']) for n in self._robots}
         ok = self._completed == expected
+        all_task_ids = sorted(self._tasks.keys())
+        done_ids = sorted({t for tasks in self._completed.values() for t in tasks})
+        all_ten = done_ids == all_task_ids
         result = {
-            'success': ok,
+            'success': ok and all_ten,
+            'all_ten_tasks_done': all_ten,
             'expected': expected,
             'completed': self._completed,
             'unassigned_task_ids': assignment.get('unassigned_task_ids', []),
@@ -310,6 +418,9 @@ class CbbaMapfMission(Node):
         out = str(self.get_parameter('result_file').value)
         Path(out).write_text(yaml.dump(result, sort_keys=False), encoding='utf-8')
         self.get_logger().info(f'Wrote {out}\n{yaml.dump(result, sort_keys=False)}')
+        if ok and all_ten:
+            self.get_logger().info('ALL_TEN_TASKS_OK')
+            return 0
         if ok:
             self.get_logger().info('ALL_ASSIGNED_TASKS_OK')
             return 0
